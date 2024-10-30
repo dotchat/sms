@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Friend Messenger</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-color: #000;
+      color: #fff;
+    }
+    .container {
+      background-color: #1c1c1c;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+      width: 400px;
+      transition: transform 0.3s;
+    }
+    .container:hover {
+      transform: scale(1.02);
+    }
+    h2 {
+      text-align: center;
+      color: #ff0000;
+      margin-bottom: 20px;
+    }
+    label {
+      font-weight: bold;
+    }
+    input, textarea, button, select {
+      display: block;
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 10px;
+      border-radius: 5px;
+      border: 1px solid #ddd;
+      font-size: 16px;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #ff0000;
+      box-shadow: 0 0 5px rgba(255, 0, 0, 0.5);
+    }
+    button {
+      background-color: #ff0000;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.3s, transform 0.2s;
+    }
+    button:hover {
+      background-color: #e60000;
+      transform: translateY(-2px);
+    }
+    #messages {
+      height: 200px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      padding: 10px;
+      background-color: #2c2c2c;
+      border-radius: 5px;
+      color: #fff;
+    }
+    .message {
+      margin-bottom: 10px;
+      color: gold; /* لون الاسم ومعرف المستخدم */
+    }
+    .timestamp {
+      font-size: 12px;
+      color: red; /* لون الوقت */
+      margin-left: 10px;
+    }
+    .message-text {
+      color: red; /* لون نص الرسالة */
+      font-size: 18px; /* زيادة حجم نص الرسالة */
+    }
+    .recipient-container {
+      display: flex;
+      justify-content: space-between;
+    }
+    .recipient-id {
+      flex: 1;
+      margin-right: 5px;
+    }
+    .previous-recipient {
+      width: 90px; /* حجم أصغر لحقل Select Previous Recipient */
+    }
+    .logo {
+      display: block;
+      margin: 0 auto 20px auto;
+      width: 100px; /* يمكنك تعديل الحجم كما تريد */
+      height: auto; /* لضبط الارتفاع تلقائيًا */
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="DOT CHAT.jpg" alt="Logo" class="logo"> <!-- إضافة صورة Logo هنا -->
+    <h2>Friend Messenger</h2>
+    <div>
+      <label>Your ID: <span id="yourId"></span></label>
+    </div>
+    <label for="username">Username:</label>
+    <input type="text" id="username" placeholder="Enter your username">
+    
+    <div class="recipient-container">
+      <label for="recipientId">Recipient ID:</label>
+      <input type="text" id="recipientId" class="recipient-id" placeholder="Enter recipient ID">
+      <label for="previousRecipient" style="display: none;">Select Previous Recipient:</label>
+      <select id="previousRecipient" class="previous-recipient">
+        <option value="">Select</option>
+        <!-- سيتم ملء هذه الخيارات بواسطة JavaScript -->
+      </select>
+    </div>
+    
+    <label for="message">Message:</label>
+    <textarea id="message" placeholder="Type your message here..."></textarea>
+    <button id="sendMessage">Send Message</button>
+    <button id="clearMessages">Clear Chat</button> <!-- زر لتنظيف المحادثة -->
+    <div id="messages"></div>
+  </div>
+  
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.8/firebase-app.js";
+    import { getFirestore, collection, addDoc, query, onSnapshot, where, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/9.6.8/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCqxhY1I1rTdFvbhX4PAVn6cEC54VRNdvQ",
+      authDomain: "smsv-22018.firebaseapp.com",
+      projectId: "smsv-22018",
+      storageBucket: "smsv-22018.firebasestorage.app",
+      messagingSenderId: "699034153241",
+      appId: "1:699034153241:web:d0d8f2eaac314e65135588",
+      measurementId: "G-KEXT5ENDWN"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const recipientIdInput = document.getElementById('recipientId');
+    const messageInput = document.getElementById('message');
+    const usernameInput = document.getElementById('username');
+    const sendMessageButton = document.getElementById('sendMessage');
+    const clearMessagesButton = document.getElementById('clearMessages'); // زر تنظيف المحادثة
+    const messagesDiv = document.getElementById('messages');
+    const yourIdSpan = document.getElementById('yourId');
+    const previousRecipientSelect = document.getElementById('previousRecipient');
+
+    // إعداد معرف المستخدم
+    let userId = localStorage.getItem('userId');
+    if (!userId) {
+      userId = Math.floor(Math.random() * 100000);
+      localStorage.setItem('userId', userId);
+    }
+    yourIdSpan.textContent = userId;
+
+    // حفظ المستلمين السابقين في localStorage
+    let previousRecipients = JSON.parse(localStorage.getItem('previousRecipients')) || [];
+
+    // ملء قائمة المستلمين السابقين
+    function populatePreviousRecipients() {
+      previousRecipientSelect.innerHTML = '<option value="">Select</option>';
+      previousRecipients.forEach(recipientId => {
+        const option = document.createElement('option');
+        option.value = recipientId;
+        option.textContent = recipientId;
+        previousRecipientSelect.appendChild(option);
+      });
+    }
+
+    populatePreviousRecipients();
+
+    // استرجاع اسم المستخدم من localStorage
+    const savedUsername = localStorage.getItem('username');
+    if (savedUsername) {
+      usernameInput.value = savedUsername;
+    }
+
+    // استرجاع Recipient ID من localStorage
+    const savedRecipientId = localStorage.getItem('recipientId');
+    if (savedRecipientId) {
+      recipientIdInput.value = savedRecipientId;
+    }
+
+    // إرسال الرسالة
+    sendMessageButton.addEventListener("click", async () => {
+      const recipientId = recipientIdInput.value || previousRecipientSelect.value;
+      const messageText = messageInput.value;
+      const username = usernameInput.value || `User${userId}`; // استخدام اسم المستخدم أو اسم افتراضي
+
+      if (recipientId && messageText) {
+        try {
+          const timestamp = new Date();
+          await addDoc(collection(db, "messages"), {
+            senderId: userId,
+            username: username,
+            recipientId: recipientId,
+            message: messageText,
+            timestamp: timestamp
+          });
+
+          // إضافة المستلم إلى قائمة المستلمين السابقين إذا لم يكن موجودًا بالفعل
+          if (!previousRecipients.includes(recipientId)) {
+            previousRecipients.push(recipientId);
+            localStorage.setItem('previousRecipients', JSON.stringify(previousRecipients));
+            populatePreviousRecipients();
+          }
+
+          // حفظ اسم المستخدم وRecipient ID في localStorage
+          localStorage.setItem('username', username);
+          localStorage.setItem('recipientId', recipientId); // حفظ Recipient ID
+
+          messageInput.value = "";
+          // recipientIdInput.value = recipientId; // الإبقاء على Recipient ID بعد الإرسال (يمكنك ترك هذه السطر لإبقاء القيمة)
+        } catch (error) {
+          alert("Error sending message: " + error);
+        }
+      } else {
+        alert("Please enter both a recipient ID and a message.");
+      }
+    });
+
+    // استقبال الرسائل
+    const q = query(collection(db, "messages"), where("recipientId", "==", userId.toString()));
+    onSnapshot(q, (snapshot) => {
+      const messagesArray = []; // مصفوفة لتخزين الرسائل
+      snapshot.forEach((doc) => {
+        messagesArray.push(doc.data());
+      });
+
+      messagesDiv.innerHTML = ""; // مسح المحتوى القديم
+      // عكس المصفوفة لعرض الرسائل من الأحدث إلى الأقدم
+      messagesArray.reverse().forEach(msg => {
+        const msgDiv = document.createElement("div");
+        msgDiv.classList.add("message");
+        msgDiv.innerHTML = `<span class="message-text">${msg.username}: ${msg.message}</span><span class="timestamp">${msg.timestamp.toDate().toLocaleString()}</span>`;
+        messagesDiv.appendChild(msgDiv);
+      });
+    });
+
+    // زر لتنظيف المحادثة
+    clearMessagesButton.addEventListener("click", async () => {
+      const snapshot = await getDocs(collection(db, "messages"));
+      snapshot.forEach((doc) => {
+        deleteDoc(doc.ref); // حذف كل الرسائل
+      });
+    });
+  </script>
+</body>
+</html>
